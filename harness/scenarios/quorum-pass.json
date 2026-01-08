@@ -1,0 +1,9 @@
+{
+  "name": "Quorum Pass — Water + Energy",
+  "council": "examples/councils/sol-tech-quorum-test.council.scroll",
+  "avots": [
+    "examples/avots/avot-water-001.avot.scroll",
+    "examples/avots/avot-energy-001.avot.scroll"
+  ],
+  "input": "Need desalination for brackish water"
+}
