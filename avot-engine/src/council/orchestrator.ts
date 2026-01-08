@@ -11,7 +11,7 @@
  */
 
 import { routeCouncilRequest } from "./router.js";
-import { callAvot, AvotCallResult } from "./avotCall.js";
+import { callAvot } from "./avotCall.js";
 import { councilVote, CouncilVoteConfig, VoteInput } from "./vote.js";
 import { councilMerge, MergeResult } from "./merge.js";
 import { RuntimeDeps } from "../runtime/nodeHandlers.js";
@@ -36,11 +36,15 @@ export interface CouncilDefinition {
   vote: CouncilVoteConfig;
 }
 
+/**
+ * Normalized council execution result.
+ * This shape is stable and safe for integration.
+ */
 export interface CouncilExecutionResult {
   approved: boolean;
-  output?: any;
+  output: any | null;
   sources: string[];
-  details?: any;
+  details: Record<string, any>;
   reason: string;
 }
 
@@ -57,7 +61,9 @@ export async function runCouncil(
   if (!targetAvot) {
     return {
       approved: false,
+      output: null,
       sources: [],
+      details: {},
       reason: `No compiled AVOT found for ${route.avot_id}`,
     };
   }
@@ -90,7 +96,9 @@ export async function runCouncil(
   if (!voteResult.approved) {
     return {
       approved: false,
+      output: null,
       sources: voteResult.approved_ids,
+      details: {},
       reason: voteResult.reason,
     };
   }
