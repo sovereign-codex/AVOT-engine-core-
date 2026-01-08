@@ -1,0 +1,21 @@
+{
+  "name": "avot-engine",
+  "version": "0.1.0",
+  "type": "module",
+  "private": true,
+  "description": "Executable runtime for AVOT scrolls (.avot.scroll) and councils (.council.scroll).",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "start": "node dist/cli.js",
+    "validate": "node dist/cli.js",
+    "run": "node dist/cli.js",
+    "test": "node --test"
+  },
+  "dependencies": {
+    "yaml": "^2.5.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "typescript": "^5.5.0"
+  }
+}
