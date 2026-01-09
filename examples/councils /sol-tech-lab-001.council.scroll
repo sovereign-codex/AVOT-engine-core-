@@ -1,0 +1,7 @@
+identity:
+  council_id: sol-tech-lab-001
+  name: Sol-Tech Laboratory Council
+  version: 0.1.0
+  status: active
+
+# Council scroll execution is scaffolded; runtime support comes next.
