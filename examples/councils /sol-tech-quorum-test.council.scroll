@@ -5,6 +5,7 @@ members:
     domain: energy
 
 routing:
+  strategy: rules
   rules:
     - if_contains: ["water", "desal", "brackish"]
       send_to: avot-water-001
