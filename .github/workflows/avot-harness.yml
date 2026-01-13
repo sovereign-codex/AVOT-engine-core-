@@ -1,0 +1,38 @@
+name: AVOT Harness Runner
+
+on:
+  workflow_dispatch:
+    inputs:
+      scenario:
+        description: "Harness scenario name (without .json)"
+        required: true
+        default: "quorum-fail"
+
+jobs:
+  run-harness:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Build engine
+        run: npm run build
+
+      - name: Run harness scenario
+        run: |
+          node dist/harness/run.js ${{ github.event.inputs.scenario }} > output.json
+
+      - name: Upload execution artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: avot-harness-output
+          path: output.json
