@@ -30,6 +30,11 @@ export interface CouncilDefinition {
     weight?: number;
   }[];
   routing?: {
+    /**
+     * Explicit routing strategy (matches what router expects).
+     * NOTE: This is a schema "truth" addition; it does not change runtime behavior.
+     */
+    strategy?: "rules" | "fallback";
     rules?: { if_contains: string[]; send_to: string }[];
     fallback?: string;
   };
