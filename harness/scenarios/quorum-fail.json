@@ -1,6 +1,6 @@
 {
   "name": "Quorum Fail — Single AVOT",
-  "council": "examples/councils/sol-tech-quorum-test.council.scroll",
+  "council": "examples/councils /sol-tech-quorum-test.council.scroll",
   "avots": [
     "examples/avots/avot-water-001.avot.scroll"
   ],
