@@ -1,0 +1,16 @@
+members:
+  - avot_id: avot-water-001
+    domain: water
+  - avot_id: avot-energy-001
+    domain: energy
+
+routing:
+  strategy: rules
+  rules:
+    - if_contains: ["water", "desal", "brackish"]
+      send_to: avot-water-001
+  fallback: avot-energy-001
+
+vote:
+  quorum: 2
+  policy: majority
