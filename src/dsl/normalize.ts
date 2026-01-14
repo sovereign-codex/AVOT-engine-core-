@@ -1,4 +1,4 @@
-import { AvotDsl } from "../types.js";
+import { AvotDsl } from "../runtime/types.js";
 
 /**
  * Normalize AVOT DSL
@@ -21,11 +21,6 @@ export function normalizeAvot(dsl: AvotDsl): AvotDsl {
     dsl.resonance.failure_policy ??= "soften";
   }
 
-  // --- Council routing defaults (CRITICAL FIX) ---
-  if (dsl.council?.routing) {
-    dsl.council.routing.strategy ??=
-      dsl.council.routing.rules?.length ? "rules" : "fallback";
-  }
-
+  // Note: Council routing defaults are set in the council loader, not here.
   return dsl;
 }
