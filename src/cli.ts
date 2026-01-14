@@ -2,7 +2,7 @@ import { parseScrollFile } from "./dsl/parse.js";
 import { validateAvot } from "./dsl/validate.js";
 import { normalizeAvot } from "./dsl/normalize.js";
 import { compileAvot } from "./compile/compileAvot.js";
-import { executeGraph } from "./runtime/executor.js";
+import { executeGraph, ExecutionDeps, ExecutionResult } from "./runtime/executor.js";
 
 import { StubLlm } from "./runtime/adapters/llm.js";
 import { StubMemory } from "./runtime/adapters/memory.js";
@@ -18,17 +18,18 @@ function getArg(flag: string): string | undefined {
 
 function printUsage() {
   console.log(`
-Usage:
+    Usage:
 
-  Validate an AVOT:
-    node dist/cli.js <avot.scroll> validate
+      Validate an AVOT:
+        node dist/cli.js <avot.scroll> validate
 
-  Run an AVOT:
-    node dist/cli.js <avot.scroll> run --input "text"
+      Run an AVOT:
+        node dist/cli.js <avot.scroll> run --input "text"
 
-  Run a Council:
-    node dist/cli.js council run <council.scroll> <avot1.scroll> [avot2.scroll ...] --input "text"
-`);
+      Run a Council:
+        node dist/cli.js council run <council.scroll> <avot1.scroll> 
+  [avot2.scroll ...] --input "text"
+    `);
 }
 
 async function runSingleAvot(file: string, input: string) {
@@ -36,31 +37,37 @@ async function runSingleAvot(file: string, input: string) {
   const diags = validateAvot(dsl);
   const errors = diags.filter(d => d.level === "error");
 
-  diags.forEach(d => console.log(`[${d.level}] ${d.path ?? ""} ${d.message}`));
+  diags.forEach(d => console.log(`[${d.level}] ${d.path ?? ""} \n${d.message}`));
   if (errors.length) process.exit(1);
 
   const { manifest, graph, runtime } = compileAvot(dsl);
 
-  const deps = {
+  const deps: ExecutionDeps = {
     llm: new StubLlm(),
     memory: new StubMemory(),
     resonance: new StubResonance(),
   };
 
-  const { state, result } = await executeGraph(
-    manifest.avot_id,
+  // Execute the graph.  The executor now only accepts three arguments:
+  // (graph, input, deps) and returns an ExecutionResult.
+  const execResult: ExecutionResult = await executeGraph(
     graph,
-    runtime,
-    deps,
     { query: input },
+    deps,
   );
 
-  console.log(JSON.stringify({
-    result,
-    resonance: state.resonance,
-    ethics_flags: state.ethics_flags,
-    trace: state.trace,
-  }, null, 2));
+  console.log(
+    JSON.stringify(
+      {
+        result: execResult.result,
+        resonance: execResult.resonance,
+        ethics_flags: execResult.ethics_flags,
+        trace: execResult.trace,
+      },
+      null,
+      2,
+    ),
+  );
 }
 
 async function runCouncilCommand(args: string[]) {
@@ -96,19 +103,13 @@ async function runCouncilCommand(args: string[]) {
     };
   });
 
-  const deps = {
+  const deps: ExecutionDeps = {
     llm: new StubLlm(),
     memory: new StubMemory(),
     resonance: new StubResonance(),
   };
 
-  const result = await runCouncil(
-    council,
-    compiledAvots,
-    input,
-    deps,
-  );
-
+  const result = await runCouncil(council, compiledAvots, input, deps);
   console.log(JSON.stringify(result, null, 2));
 }
 
@@ -137,7 +138,7 @@ async function main() {
   if (cmd === "validate") {
     const dsl = normalizeAvot(parseScrollFile(file));
     const diags = validateAvot(dsl);
-    diags.forEach(d => console.log(`[${d.level}] ${d.path ?? ""} ${d.message}`));
+    diags.forEach(d => console.log(`[${d.level}] ${d.path ?? ""} \n${d.message}`));
     process.exit(diags.some(d => d.level === "error") ? 1 : 0);
   }
 
