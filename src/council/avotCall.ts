@@ -1,19 +1,18 @@
 /**
  * AVOT Call Adapter
  *
- * Executes a compiled AVOT graph with provided input.
- * This module intentionally does NOT:
- * - perform routing
- * - perform voting
- * - perform merging
- * - write to ledgers
+ * Executes a compiled AVOT graph with provided input.  This module
+ * intentionally does NOT:
+ *  - perform routing
+ *  - perform voting
+ *  - perform merging
+ *  - write to ledgers
  *
  * It is a thin execution boundary.
  */
 
-import { CompiledGraph, RuntimeConfig } from "../types.js";
-import { executeGraph } from "../runtime/executor.js";
-import { RuntimeDeps } from "../runtime/nodeHandlers.js";
+import { CompiledGraph, RuntimeConfig } from "../runtime/types.js";
+import { executeGraph, ExecutionDeps, ExecutionResult } from "../runtime/executor.js";
 
 export interface AvotCallInput {
   avot_id: string;
@@ -30,25 +29,23 @@ export interface AvotCallResult {
   ethics_flags?: string[];
 }
 
+/**
+ * Execute a compiled AVOT.  This adapter unwraps the AVOT call
+ * arguments, delegates to the graph executor and then normalizes
+ * its result into a stable envelope expected by council orchestration.
+ */
 export async function callAvot(
   call: AvotCallInput,
-  deps: RuntimeDeps,
+  deps: ExecutionDeps,
 ): Promise<AvotCallResult> {
-  const { avot_id, graph, runtime, input } = call;
-
-  const { state, result } = await executeGraph(
-    avot_id,
-    graph,
-    runtime,
-    deps,
-    input,
-  );
-
+  const { avot_id, graph, input } = call;
+  // executeGraph now accepts (graph, input, deps) and returns an ExecutionResult
+  const execResult: ExecutionResult = await executeGraph(graph, input, deps);
   return {
     avot_id,
-    result,
-    trace: state.trace,
-    resonance: state.resonance,
-    ethics_flags: state.ethics_flags,
+    result: execResult.result,
+    trace: execResult.trace?.steps ?? execResult.trace,
+    resonance: execResult.resonance,
+    ethics_flags: execResult.ethics_flags,
   };
 }
