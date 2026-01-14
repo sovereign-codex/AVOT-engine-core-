@@ -7,7 +7,8 @@
  * 3. Vote
  * 4. Merge approved outputs
  *
- * This module assumes AVOTs are already compiled.
+ * This module assumes AVOTs are already compiled and
+ * council definitions are normalized before execution.
  */
 
 import { routeCouncilRequest } from "./router.js";
@@ -29,15 +30,19 @@ export interface CouncilDefinition {
     domain?: string;
     weight?: number;
   }[];
+
+  /**
+   * Routing is optional at the council level,
+   * but if present it MUST be fully specified.
+   *
+   * Normalization guarantees `strategy` exists.
+   */
   routing?: {
-    /**
-     * Explicit routing strategy (matches what router expects).
-     * NOTE: This is a schema "truth" addition; it does not change runtime behavior.
-     */
-    strategy?: "rules" | "fallback";
+    strategy: "rules" | "fallback";
     rules?: { if_contains: string[]; send_to: string }[];
     fallback?: string;
   };
+
   vote: CouncilVoteConfig;
 }
 
