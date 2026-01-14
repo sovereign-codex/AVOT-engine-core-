@@ -22,8 +22,14 @@ export interface RoutingRule {
   send_to: string;
 }
 
+/**
+ * Configuration for council routing.
+ *
+ * strategy: "rules" means apply rules list first (keywords), then fallback if no rule matches.
+ * "fallback" means ignore routing rules and always use the fallback target.
+ */
 export interface CouncilRoutingConfig {
-  strategy: "domain_router" | "simple";
+  strategy: "rules" | "fallback";
   rules?: RoutingRule[];
   fallback?: string;
 }
