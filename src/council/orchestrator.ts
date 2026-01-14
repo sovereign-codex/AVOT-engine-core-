@@ -2,20 +2,21 @@
  * Council Orchestrator
  *
  * Executes a council decision flow:
- * 1. Route request
- * 2. Call AVOT(s)
- * 3. Vote
- * 4. Merge approved outputs
+ *   1. Route request
+ *   2. Call AVOT(s)
+ *   3. Vote
+ *   4. Merge approved outputs
  *
- * This module assumes AVOTs are already compiled.
+ * This module assumes AVOTs are already compiled and focuses on
+ * orchestrating the high-level flow.
  */
 
 import { routeCouncilRequest } from "./router.js";
 import { callAvot } from "./avotCall.js";
 import { councilVote, CouncilVoteConfig, VoteInput } from "./vote.js";
 import { councilMerge, MergeResult } from "./merge.js";
-import { RuntimeDeps } from "../runtime/nodeHandlers.js";
-import { CompiledGraph, RuntimeConfig } from "../types.js";
+import { ExecutionDeps } from "../runtime/executor.js";
+import { CompiledGraph, RuntimeConfig } from "../runtime/types.js";
 
 export interface CompiledAvot {
   avot_id: string;
@@ -42,8 +43,8 @@ export interface CouncilDefinition {
 }
 
 /**
- * Normalized council execution result.
- * This shape is stable and safe for integration.
+ * Normalized council execution result.  This shape is stable and safe for
+ * integration.
  */
 export interface CouncilExecutionResult {
   approved: boolean;
@@ -57,7 +58,7 @@ export async function runCouncil(
   council: CouncilDefinition,
   avots: CompiledAvot[],
   input: string,
-  deps: RuntimeDeps,
+  deps: ExecutionDeps,
 ): Promise<CouncilExecutionResult> {
   // --- 1. Route ---
   const route = routeCouncilRequest(council, input);
