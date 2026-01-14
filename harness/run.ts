@@ -1,25 +1,29 @@
 /**
  * AVOT Engine Test Harness
  *
- * Mobile-friendly scenario runner.
+ * Mobile‑friendly scenario runner.
  * Loads a scenario JSON and executes a council run.
  */
 
 import fs from "node:fs";
 import path from "node:path";
 
-import { parseScrollFile } from "../src/dsl/parse.js";
-import { normalizeAvot } from "../src/dsl/normalize.js";
-import { validateAvot } from "../src/dsl/validate.js";
-import { compileAvot } from "../src/compile/compileAvot.js";
+import { parseScrollFile } from "../dsl/parse.js";
+import { normalizeAvot } from "../dsl/normalize.js";
+import { validateAvot } from "../dsl/validate.js";
+import { compileAvot } from "../compile/compileAvot.js";
 
-import { loadCouncilFromFile } from "../src/council/loader.js";
-import { runCouncil } from "../src/council/orchestrator.js";
+import { loadCouncilFromFile } from "../council/loader.js";
+import { runCouncil } from "../council/orchestrator.js";
 
-import { StubLlm } from "../src/runtime/adapters/llm.js";
-import { StubMemory } from "../src/runtime/adapters/memory.js";
-import { StubResonance } from "../src/runtime/adapters/resonance.js";
+import { StubLlm } from "../runtime/adapters/llm.js";
+import { StubMemory } from "../runtime/adapters/memory.js";
+import { StubResonance } from "../runtime/adapters/resonance.js";
 
+/**
+ * Load a test scenario by name.
+ * Scenarios live in the top‑level harness/scenarios folder.
+ */
 function loadScenario(name: string) {
   const file = path.join(
     process.cwd(),
@@ -35,6 +39,9 @@ function loadScenario(name: string) {
   return JSON.parse(fs.readFileSync(file, "utf8"));
 }
 
+/**
+ * Execute the scenario.
+ */
 async function run() {
   const scenarioName = process.argv[2];
   if (!scenarioName) {
@@ -44,8 +51,10 @@ async function run() {
 
   const scenario = loadScenario(scenarioName);
 
+  // Load the council scroll
   const council = loadCouncilFromFile(scenario.council);
 
+  // Compile each AVOT scroll
   const compiledAvots = scenario.avots.map((file: string) => {
     const dsl = normalizeAvot(parseScrollFile(file));
     const diags = validateAvot(dsl);
@@ -65,12 +74,14 @@ async function run() {
     };
   });
 
+  // Provide stubbed dependencies
   const deps = {
     llm: new StubLlm(),
     memory: new StubMemory(),
     resonance: new StubResonance(),
   };
 
+  // Run the council orchestration
   const result = await runCouncil(
     council,
     compiledAvots,
@@ -78,10 +89,16 @@ async function run() {
     deps,
   );
 
-  console.log(JSON.stringify({
-    scenario: scenario.name,
-    result,
-  }, null, 2));
+  console.log(
+    JSON.stringify(
+      {
+        scenario: scenario.name,
+        result,
+      },
+      null,
+      2,
+    ),
+  );
 }
 
 run().catch(err => {
