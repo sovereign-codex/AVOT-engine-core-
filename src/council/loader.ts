@@ -12,6 +12,15 @@ import fs from "node:fs";
 import YAML from "yaml";
 import { CouncilDefinition } from "./orchestrator.js";
 
+/**
+ * Load a council definition from disk.
+ *
+ * This function reads a YAML scroll file, performs very light shape
+ * validation, and normalizes the structure into the expected
+ * {@link CouncilDefinition} format. In particular, the routing
+ * configuration now includes a `strategy` field because the
+ * orchestrator expects one of two values ("rules" or "fallback").
+ */
 export function loadCouncilFromFile(path: string): CouncilDefinition {
   const raw = fs.readFileSync(path, "utf8");
   const parsed = YAML.parse(raw);
@@ -32,6 +41,10 @@ export function loadCouncilFromFile(path: string): CouncilDefinition {
     })),
     routing: parsed.routing
       ? {
+          // The orchestrator requires a routing strategy.  If the user
+          // explicitly provides one we respect it, otherwise default
+          // based on the presence of rules.
+          strategy: parsed.routing.strategy ?? (parsed.routing.rules ? "rules" : "fallback"),
           rules: parsed.routing.rules ?? [],
           fallback: parsed.routing.fallback,
         }
