@@ -3,20 +3,25 @@
  *
  * Executes a council decision flow:
  * 1. Route request
- * 2. Call AVOT(s)
+ * 2. Call AVOT
  * 3. Vote
  * 4. Merge approved outputs
  *
- * This module assumes AVOTs are already compiled and
- * council definitions are normalized before execution.
+ * This module is the FINAL boundary between
+ * runtime execution and external consumers.
  */
 
 import { routeCouncilRequest } from "./router.js";
 import { callAvot } from "./avotCall.js";
 import { councilVote, CouncilVoteConfig, VoteInput } from "./vote.js";
-import { councilMerge, MergeResult } from "./merge.js";
+import { councilMerge } from "./merge.js";
+
 import { RuntimeDeps } from "../runtime/nodeHandlers.js";
 import { CompiledGraph, RuntimeConfig } from "../types.js";
+
+/* ------------------------------------------------------------------ */
+/* Types                                                               */
+/* ------------------------------------------------------------------ */
 
 export interface CompiledAvot {
   avot_id: string;
@@ -31,15 +36,12 @@ export interface CouncilDefinition {
     weight?: number;
   }[];
 
-  /**
-   * Routing is optional at the council level,
-   * but if present it MUST be fully specified.
-   *
-   * Normalization guarantees `strategy` exists.
-   */
   routing?: {
     strategy: "rules" | "fallback";
-    rules?: { if_contains: string[]; send_to: string }[];
+    rules?: {
+      if_contains: string[];
+      send_to: string;
+    }[];
     fallback?: string;
   };
 
@@ -48,7 +50,7 @@ export interface CouncilDefinition {
 
 /**
  * Normalized council execution result.
- * This shape is stable and safe for integration.
+ * This shape is STABLE and safe for CLI, API, and Archivist use.
  */
 export interface CouncilExecutionResult {
   approved: boolean;
@@ -58,13 +60,18 @@ export interface CouncilExecutionResult {
   reason: string;
 }
 
+/* ------------------------------------------------------------------ */
+/* Execution                                                           */
+/* ------------------------------------------------------------------ */
+
 export async function runCouncil(
   council: CouncilDefinition,
   avots: CompiledAvot[],
   input: string,
   deps: RuntimeDeps,
 ): Promise<CouncilExecutionResult> {
-  // --- 1. Route ---
+  /* ---------------- Route ---------------- */
+
   const route = routeCouncilRequest(council, input);
 
   const targetAvot = avots.find(a => a.avot_id === route.avot_id);
@@ -78,7 +85,8 @@ export async function runCouncil(
     };
   }
 
-  // --- 2. Call AVOT ---
+  /* ---------------- Execute ---------------- */
+
   const callResult = await callAvot(
     {
       avot_id: targetAvot.avot_id,
@@ -89,7 +97,8 @@ export async function runCouncil(
     deps,
   );
 
-  // --- 3. Prepare votes ---
+  /* ---------------- Vote ---------------- */
+
   const votes: VoteInput[] = [
     {
       avot_id: callResult.avot_id,
@@ -100,7 +109,6 @@ export async function runCouncil(
     },
   ];
 
-  // --- 4. Vote ---
   const voteResult = councilVote(votes, council.vote);
 
   if (!voteResult.approved) {
@@ -108,13 +116,16 @@ export async function runCouncil(
       approved: false,
       output: null,
       sources: voteResult.approved_ids,
-      details: {},
+      details: {
+        votes,
+      },
       reason: voteResult.reason,
     };
   }
 
-  // --- 5. Merge ---
-  const merged: MergeResult = councilMerge(
+  /* ---------------- Merge ---------------- */
+
+  const merged = councilMerge(
     [
       {
         avot_id: callResult.avot_id,
@@ -129,7 +140,7 @@ export async function runCouncil(
     approved: true,
     output: merged.output,
     sources: merged.sources,
-    details: merged.details,
+    details: merged.details ?? {},
     reason: "Council approved and merged output",
   };
 }
