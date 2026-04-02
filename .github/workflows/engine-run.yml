@@ -1,0 +1,49 @@
+name: AVOT Engine Runner
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  run-engine:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Ensure directories exist
+        run: |
+          mkdir -p inputs/events
+          mkdir -p outputs/decisions
+          mkdir -p outputs/artifacts
+
+      - name: List input events
+        run: |
+          echo "=== INPUT EVENTS ==="
+          ls -R inputs/events || echo "No events found"
+
+      - name: Run event processor
+        run: |
+          node scripts/process-event.js
+
+      - name: Show outputs
+        run: |
+          echo "=== DECISIONS ==="
+          ls -R outputs/decisions || echo "No decisions"
+
+          echo "=== ARTIFACTS ==="
+          ls -R outputs/artifacts || echo "No artifacts"
+
+      - name: Commit outputs
+        run: |
+          git config user.name "codex-bot"
+          git config user.email "actions@github.com"
+
+          git add outputs/
+
+          git commit -m "Engine processed events into decisions" || echo "No changes"
+
+          git push
