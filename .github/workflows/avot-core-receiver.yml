@@ -26,13 +26,19 @@ jobs:
           mkdir -p inputs/incoming
 
       - name: Write incoming payload
+        id: write_payload
         run: |
-          FILE="inputs/incoming/dispatch_${{ github.run_id }}.json"
+          TRACE="${{ github.event.client_payload.trace_id }}"
+          SOURCE="${{ github.event.client_payload.source }}"
+          TIME=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+
+          FILE="inputs/incoming/${TRACE}.json"
 
           echo '{' > $FILE
-          echo '  "trace_id": "${{ github.event.client_payload.trace_id }}",' >> $FILE
-          echo '  "source": "${{ github.event.client_payload.source }}",' >> $FILE
-          echo '  "received_at": "'$(date -u +"%Y-%m-%dT%H:%M:%SZ")'"' >> $FILE
+          echo '  "trace_id": "'$TRACE'",' >> $FILE
+          echo '  "source": "'$SOURCE'",' >> $FILE
+          echo '  "received_at": "'$TIME'",' >> $FILE
+          echo '  "status": "received"' >> $FILE
           echo '}' >> $FILE
 
           echo "Wrote $FILE"
@@ -43,5 +49,37 @@ jobs:
           git config user.email "actions@github.com"
 
           git add inputs/incoming/
-          git commit -m "Received dispatch event" || echo "No changes"
+          git commit -m "Received dispatch ${{ github.event.client_payload.trace_id }}" || echo "No changes"
           git push
+
+      # 🔥 NEW — SIMULATED EXECUTION STEP
+      - name: Simulate AVOT execution
+        id: execute
+        run: |
+          echo "Running AVOT logic..."
+          sleep 2
+          echo "Execution complete"
+
+      # 🔥 NEW — SEND RESULT BACK TO CONTROL CENTER
+      - name: Send result back to Control Center
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TRACE="${{ github.event.client_payload.trace_id }}"
+
+          echo "Dispatching result for $TRACE"
+
+          curl -s -o /dev/null -w "%{http_code}" -X POST \
+            -H "Authorization: Bearer $GH_TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            https://api.github.com/repos/sovereign-codex/control-center/dispatches \
+            -d "{
+              \"event_type\": \"avot_result\",
+              \"client_payload\": {
+                \"trace_id\": \"$TRACE\",
+                \"status\": \"completed\",
+                \"source\": \"avot-core\"
+              }
+            }"
+
+          echo "Result dispatched"
