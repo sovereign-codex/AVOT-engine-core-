@@ -1,0 +1,15 @@
+name: AVOT Core Receiver
+
+on:
+  repository_dispatch:
+    types: [avot_execution]
+
+jobs:
+  receive:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Log dispatch event
+        run: |
+          echo "Received execution event"
+          echo "Trace ID: ${{ github.event.client_payload.trace_id }}"
