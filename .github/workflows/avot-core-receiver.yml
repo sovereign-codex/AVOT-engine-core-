@@ -21,6 +21,33 @@ jobs:
       - name: Checkout repo
         uses: actions/checkout@v4
 
+      # 🔑 REQUIRED for cross-repo dispatch + trace
+      - name: Generate GitHub App token
+        id: app-token
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: ${{ secrets.CODEX_APP_ID }}
+          private-key: ${{ secrets.CODEX_APP_PRIVATE_KEY }}
+          owner: sovereign-codex
+
+      # 🔥 TRACE: received
+      - name: Emit trace (received)
+        run: |
+          TRACE="${{ github.event.client_payload.trace_id || github.run_id }}"
+
+          curl -X POST https://api.github.com/repos/sovereign-codex/AVOT-TRACE/dispatches \
+            -H "Authorization: Bearer ${{ steps.app-token.outputs.token }}" \
+            -H "Accept: application/vnd.github+json" \
+            -d "{
+              \"event_type\": \"trace_log\",
+              \"client_payload\": {
+                \"trace_id\": \"$TRACE\",
+                \"repo\": \"${{ github.repository }}\",
+                \"workflow\": \"receiver\",
+                \"status\": \"received\"
+              }
+            }"
+
       - name: Ensure inputs directory
         run: |
           mkdir -p inputs/incoming
@@ -31,6 +58,10 @@ jobs:
           TRACE="${{ github.event.client_payload.trace_id }}"
           SOURCE="${{ github.event.client_payload.source }}"
           TIME=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+
+          if [ -z "$TRACE" ]; then
+            TRACE="${GITHUB_RUN_ID}"
+          fi
 
           FILE="inputs/incoming/${TRACE}.json"
 
@@ -52,7 +83,25 @@ jobs:
           git commit -m "Received dispatch ${{ github.event.client_payload.trace_id }}" || echo "No changes"
           git push
 
-      # 🔥 NEW — SIMULATED EXECUTION STEP
+      # 🔥 TRACE: stored
+      - name: Emit trace (stored)
+        run: |
+          TRACE="${{ github.event.client_payload.trace_id || github.run_id }}"
+
+          curl -X POST https://api.github.com/repos/sovereign-codex/AVOT-TRACE/dispatches \
+            -H "Authorization: Bearer ${{ steps.app-token.outputs.token }}" \
+            -H "Accept: application/vnd.github+json" \
+            -d "{
+              \"event_type\": \"trace_log\",
+              \"client_payload\": {
+                \"trace_id\": \"$TRACE\",
+                \"repo\": \"${{ github.repository }}\",
+                \"workflow\": \"receiver\",
+                \"status\": \"stored\"
+              }
+            }"
+
+      # ⚙️ EXECUTION
       - name: Simulate AVOT execution
         id: execute
         run: |
@@ -60,19 +109,41 @@ jobs:
           sleep 2
           echo "Execution complete"
 
-      # 🔥 NEW — SEND RESULT BACK TO CONTROL CENTER
+      # 🔥 TRACE: execution complete
+      - name: Emit trace (engine complete)
+        run: |
+          TRACE="${{ github.event.client_payload.trace_id || github.run_id }}"
+
+          curl -X POST https://api.github.com/repos/sovereign-codex/AVOT-TRACE/dispatches \
+            -H "Authorization: Bearer ${{ steps.app-token.outputs.token }}" \
+            -H "Accept: application/vnd.github+json" \
+            -d "{
+              \"event_type\": \"trace_log\",
+              \"client_payload\": {
+                \"trace_id\": \"$TRACE\",
+                \"repo\": \"${{ github.repository }}\",
+                \"workflow\": \"receiver\",
+                \"status\": \"engine_completed\"
+              }
+            }"
+
+      # 🔁 SEND RESULT BACK
       - name: Send result back to Control Center
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
         run: |
           TRACE="${{ github.event.client_payload.trace_id }}"
 
+          if [ -z "$TRACE" ]; then
+            TRACE="${GITHUB_RUN_ID}"
+          fi
+
           echo "Dispatching result for $TRACE"
 
-          curl -s -o /dev/null -w "%{http_code}" -X POST \
+          RESPONSE=$(curl -s -o response.txt -w "%{http_code}" -X POST \
             -H "Authorization: Bearer $GH_TOKEN" \
             -H "Accept: application/vnd.github+json" \
-            https://api.github.com/repos/sovereign-codex/control-center/dispatches \
+            https://api.github.com/repos/sovereign-codex/Codex-control-center/dispatches \
             -d "{
               \"event_type\": \"avot_result\",
               \"client_payload\": {
@@ -80,6 +151,29 @@ jobs:
                 \"status\": \"completed\",
                 \"source\": \"avot-core\"
               }
-            }"
+            }")
 
-          echo "Result dispatched"
+          echo "HTTP Status: $RESPONSE"
+          cat response.txt
+
+          if [ "$RESPONSE" = "204" ]; then
+            echo "✅ Result dispatched"
+            STATUS="result_sent"
+          else
+            echo "❌ Result dispatch failed"
+            STATUS="result_failed"
+          fi
+
+          # 🔥 TRACE: result dispatch status
+          curl -X POST https://api.github.com/repos/sovereign-codex/AVOT-TRACE/dispatches \
+            -H "Authorization: Bearer $GH_TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            -d "{
+              \"event_type\": \"trace_log\",
+              \"client_payload\": {
+                \"trace_id\": \"$TRACE\",
+                \"repo\": \"${{ github.repository }}\",
+                \"workflow\": \"receiver\",
+                \"status\": \"$STATUS\"
+              }
+            }"
