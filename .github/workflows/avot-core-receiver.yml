@@ -2,7 +2,8 @@ name: AVOT Core Receiver
 
 on:
   repository_dispatch:
-    types: [avot_execution]
+    types:
+      - avot_execution
 
 permissions:
   contents: write
@@ -17,11 +18,11 @@ jobs:
           echo "=== AVOT CORE RECEIVED DISPATCH ==="
           echo "Trace ID: ${{ github.event.client_payload.trace_id }}"
           echo "Source: ${{ github.event.client_payload.source }}"
+          echo "Route: ${{ github.event.client_payload.route }}"
 
       - name: Checkout repo
         uses: actions/checkout@v4
 
-      # 🔑 REQUIRED for cross-repo dispatch + trace
       - name: Generate GitHub App token
         id: app-token
         uses: actions/create-github-app-token@v2
@@ -30,20 +31,42 @@ jobs:
           private-key: ${{ secrets.CODEX_APP_PRIVATE_KEY }}
           owner: sovereign-codex
 
-      # 🔥 TRACE: received
-      - name: Emit trace (received)
+      - name: Set runtime variables
         run: |
-          TRACE="${{ github.event.client_payload.trace_id || github.run_id }}"
+          TRACE="${{ github.event.client_payload.trace_id }}"
+          SOURCE="${{ github.event.client_payload.source }}"
+          ROUTE="${{ github.event.client_payload.route }}"
 
-          curl -X POST https://api.github.com/repos/sovereign-codex/AVOT-TRACE/dispatches \
-            -H "Authorization: Bearer ${{ steps.app-token.outputs.token }}" \
+          if [ -z "$TRACE" ]; then
+            TRACE="trace_${GITHUB_RUN_ID}"
+          fi
+
+          if [ -z "$SOURCE" ]; then
+            SOURCE="unknown"
+          fi
+
+          if [ -z "$ROUTE" ]; then
+            ROUTE="unknown"
+          fi
+
+          echo "TRACE_ID=$TRACE" >> "$GITHUB_ENV"
+          echo "SOURCE_REPO=$SOURCE" >> "$GITHUB_ENV"
+          echo "ROUTE_NAME=$ROUTE" >> "$GITHUB_ENV"
+          echo "TIMESTAMP=$(date -u +"%Y-%m-%dT%H:%M:%SZ")" >> "$GITHUB_ENV"
+
+      - name: Emit trace (received)
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+        run: |
+          curl -s -X POST https://api.github.com/repos/sovereign-codex/AVOT-TRACE/dispatches \
+            -H "Authorization: Bearer $GH_TOKEN" \
             -H "Accept: application/vnd.github+json" \
             -d "{
               \"event_type\": \"trace_log\",
               \"client_payload\": {
-                \"trace_id\": \"$TRACE\",
-                \"repo\": \"${{ github.repository }}\",
-                \"workflow\": \"receiver\",
+                \"trace_id\": \"$TRACE_ID\",
+                \"repo\": \"${GITHUB_REPOSITORY}\",
+                \"workflow\": \"AVOT Core Receiver\",
                 \"status\": \"received\"
               }
             }"
@@ -51,26 +74,19 @@ jobs:
       - name: Ensure inputs directory
         run: |
           mkdir -p inputs/incoming
+          mkdir -p outputs/results
 
       - name: Write incoming payload
-        id: write_payload
         run: |
-          TRACE="${{ github.event.client_payload.trace_id }}"
-          SOURCE="${{ github.event.client_payload.source }}"
-          TIME=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+          FILE="inputs/incoming/${TRACE_ID}.json"
 
-          if [ -z "$TRACE" ]; then
-            TRACE="${GITHUB_RUN_ID}"
-          fi
-
-          FILE="inputs/incoming/${TRACE}.json"
-
-          echo '{' > $FILE
-          echo '  "trace_id": "'$TRACE'",' >> $FILE
-          echo '  "source": "'$SOURCE'",' >> $FILE
-          echo '  "received_at": "'$TIME'",' >> $FILE
-          echo '  "status": "received"' >> $FILE
-          echo '}' >> $FILE
+          echo '{' > "$FILE"
+          echo '  "trace_id": "'"$TRACE_ID"'",' >> "$FILE"
+          echo '  "source": "'"$SOURCE_REPO"'",' >> "$FILE"
+          echo '  "route": "'"$ROUTE_NAME"'",' >> "$FILE"
+          echo '  "received_at": "'"$TIMESTAMP"'",' >> "$FILE"
+          echo '  "status": "received"' >> "$FILE"
+          echo '}' >> "$FILE"
 
           echo "Wrote $FILE"
 
@@ -80,65 +96,73 @@ jobs:
           git config user.email "actions@github.com"
 
           git add inputs/incoming/
-          git commit -m "Received dispatch ${{ github.event.client_payload.trace_id }}" || echo "No changes"
+          git commit -m "Received dispatch ${TRACE_ID}" || echo "No changes"
           git push
 
-      # 🔥 TRACE: stored
       - name: Emit trace (stored)
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
         run: |
-          TRACE="${{ github.event.client_payload.trace_id || github.run_id }}"
-
-          curl -X POST https://api.github.com/repos/sovereign-codex/AVOT-TRACE/dispatches \
-            -H "Authorization: Bearer ${{ steps.app-token.outputs.token }}" \
+          curl -s -X POST https://api.github.com/repos/sovereign-codex/AVOT-TRACE/dispatches \
+            -H "Authorization: Bearer $GH_TOKEN" \
             -H "Accept: application/vnd.github+json" \
             -d "{
               \"event_type\": \"trace_log\",
               \"client_payload\": {
-                \"trace_id\": \"$TRACE\",
-                \"repo\": \"${{ github.repository }}\",
-                \"workflow\": \"receiver\",
+                \"trace_id\": \"$TRACE_ID\",
+                \"repo\": \"${GITHUB_REPOSITORY}\",
+                \"workflow\": \"AVOT Core Receiver\",
                 \"status\": \"stored\"
               }
             }"
 
-      # ⚙️ EXECUTION
       - name: Simulate AVOT execution
-        id: execute
         run: |
-          echo "Running AVOT logic..."
+          echo "Running AVOT logic for $TRACE_ID"
           sleep 2
+          RESULT_FILE="outputs/results/${TRACE_ID}.json"
+
+          echo '{' > "$RESULT_FILE"
+          echo '  "trace_id": "'"$TRACE_ID"'",' >> "$RESULT_FILE"
+          echo '  "repo": "'"${GITHUB_REPOSITORY}"'",' >> "$RESULT_FILE"
+          echo '  "status": "completed",' >> "$RESULT_FILE"
+          echo '  "completed_at": "'"$(date -u +"%Y-%m-%dT%H:%M:%SZ")"'"' >> "$RESULT_FILE"
+          echo '}' >> "$RESULT_FILE"
+
           echo "Execution complete"
+          echo "Wrote $RESULT_FILE"
 
-      # 🔥 TRACE: execution complete
-      - name: Emit trace (engine complete)
+      - name: Commit execution result
         run: |
-          TRACE="${{ github.event.client_payload.trace_id || github.run_id }}"
+          git config user.name "codex-bot"
+          git config user.email "actions@github.com"
 
-          curl -X POST https://api.github.com/repos/sovereign-codex/AVOT-TRACE/dispatches \
-            -H "Authorization: Bearer ${{ steps.app-token.outputs.token }}" \
+          git add outputs/results/
+          git commit -m "Execution result ${TRACE_ID}" || echo "No changes"
+          git push
+
+      - name: Emit trace (engine complete)
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+        run: |
+          curl -s -X POST https://api.github.com/repos/sovereign-codex/AVOT-TRACE/dispatches \
+            -H "Authorization: Bearer $GH_TOKEN" \
             -H "Accept: application/vnd.github+json" \
             -d "{
               \"event_type\": \"trace_log\",
               \"client_payload\": {
-                \"trace_id\": \"$TRACE\",
-                \"repo\": \"${{ github.repository }}\",
-                \"workflow\": \"receiver\",
+                \"trace_id\": \"$TRACE_ID\",
+                \"repo\": \"${GITHUB_REPOSITORY}\",
+                \"workflow\": \"AVOT Core Receiver\",
                 \"status\": \"engine_completed\"
               }
             }"
 
-      # 🔁 SEND RESULT BACK
       - name: Send result back to Control Center
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
         run: |
-          TRACE="${{ github.event.client_payload.trace_id }}"
-
-          if [ -z "$TRACE" ]; then
-            TRACE="${GITHUB_RUN_ID}"
-          fi
-
-          echo "Dispatching result for $TRACE"
+          echo "Dispatching result for $TRACE_ID"
 
           RESPONSE=$(curl -s -o response.txt -w "%{http_code}" -X POST \
             -H "Authorization: Bearer $GH_TOKEN" \
@@ -147,33 +171,38 @@ jobs:
             -d "{
               \"event_type\": \"avot_result\",
               \"client_payload\": {
-                \"trace_id\": \"$TRACE\",
+                \"trace_id\": \"$TRACE_ID\",
                 \"status\": \"completed\",
-                \"source\": \"avot-core\"
+                \"source\": \"AVOT-engine-core-\"
               }
             }")
 
           echo "HTTP Status: $RESPONSE"
-          cat response.txt
+          cat response.txt || true
 
           if [ "$RESPONSE" = "204" ]; then
-            echo "✅ Result dispatched"
-            STATUS="result_sent"
+            echo "Result dispatched"
+            RESULT_STATUS="result_sent"
           else
-            echo "❌ Result dispatch failed"
-            STATUS="result_failed"
+            echo "Result dispatch failed"
+            RESULT_STATUS="result_failed"
           fi
 
-          # 🔥 TRACE: result dispatch status
-          curl -X POST https://api.github.com/repos/sovereign-codex/AVOT-TRACE/dispatches \
+          echo "RESULT_STATUS=$RESULT_STATUS" >> "$GITHUB_ENV"
+
+      - name: Emit trace (result dispatch status)
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+        run: |
+          curl -s -X POST https://api.github.com/repos/sovereign-codex/AVOT-TRACE/dispatches \
             -H "Authorization: Bearer $GH_TOKEN" \
             -H "Accept: application/vnd.github+json" \
             -d "{
               \"event_type\": \"trace_log\",
               \"client_payload\": {
-                \"trace_id\": \"$TRACE\",
-                \"repo\": \"${{ github.repository }}\",
-                \"workflow\": \"receiver\",
-                \"status\": \"$STATUS\"
+                \"trace_id\": \"$TRACE_ID\",
+                \"repo\": \"${GITHUB_REPOSITORY}\",
+                \"workflow\": \"AVOT Core Receiver\",
+                \"status\": \"$RESULT_STATUS\"
               }
             }"
