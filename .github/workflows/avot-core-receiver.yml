@@ -8,6 +8,10 @@ on:
 permissions:
   contents: write
 
+concurrency:
+  group: avot-core-receiver
+  cancel-in-progress: false
+
 jobs:
   receive:
     runs-on: ubuntu-latest
@@ -30,6 +34,10 @@ jobs:
           app-id: ${{ secrets.CODEX_APP_ID }}
           private-key: ${{ secrets.CODEX_APP_PRIVATE_KEY }}
           owner: sovereign-codex
+          repositories: |
+            AVOT-TRACE
+            Codex-control-center
+            AVOT-engine-core-
 
       - name: Set runtime variables
         run: |
@@ -94,10 +102,10 @@ jobs:
         run: |
           git config user.name "codex-bot"
           git config user.email "actions@github.com"
-
+          git pull origin main --rebase || echo "No remote changes"
           git add inputs/incoming/
           git commit -m "Received dispatch ${TRACE_ID}" || echo "No changes"
-          git push
+          git push origin main
 
       - name: Emit trace (stored)
         env:
@@ -120,6 +128,7 @@ jobs:
         run: |
           echo "Running AVOT logic for $TRACE_ID"
           sleep 2
+
           RESULT_FILE="outputs/results/${TRACE_ID}.json"
 
           echo '{' > "$RESULT_FILE"
@@ -136,10 +145,10 @@ jobs:
         run: |
           git config user.name "codex-bot"
           git config user.email "actions@github.com"
-
+          git pull origin main --rebase || echo "No remote changes"
           git add outputs/results/
           git commit -m "Execution result ${TRACE_ID}" || echo "No changes"
-          git push
+          git push origin main
 
       - name: Emit trace (engine complete)
         env:
