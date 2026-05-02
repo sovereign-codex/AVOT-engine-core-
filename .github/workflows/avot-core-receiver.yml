@@ -1,4 +1,4 @@
-name: AVOT Core Receiver
+name: AVOT Engine Receiver
 
 on:
   repository_dispatch:
@@ -9,7 +9,7 @@ permissions:
   contents: write
 
 concurrency:
-  group: avot-core-receiver
+  group: avot-engine-receiver
   cancel-in-progress: false
 
 jobs:
@@ -19,7 +19,7 @@ jobs:
     steps:
       - name: Log incoming dispatch
         run: |
-          echo "=== AVOT CORE RECEIVED DISPATCH ==="
+          echo "=== AVOT ENGINE RECEIVED DISPATCH ==="
           echo "Trace ID: ${{ github.event.client_payload.trace_id }}"
           echo "Source: ${{ github.event.client_payload.source }}"
           echo "Route: ${{ github.event.client_payload.route }}"
@@ -37,7 +37,7 @@ jobs:
           repositories: |
             AVOT-TRACE
             Codex-control-center
-            AVOT-engine-core-
+            avot-engine
 
       - name: Set runtime variables
         run: |
@@ -74,12 +74,12 @@ jobs:
               \"client_payload\": {
                 \"trace_id\": \"$TRACE_ID\",
                 \"repo\": \"${GITHUB_REPOSITORY}\",
-                \"workflow\": \"AVOT Core Receiver\",
+                \"workflow\": \"avot-engine-receiver\",
                 \"status\": \"received\"
               }
             }"
 
-      - name: Ensure inputs directory
+      - name: Ensure working directories
         run: |
           mkdir -p inputs/incoming
           mkdir -p outputs/results
@@ -88,24 +88,20 @@ jobs:
         run: |
           FILE="inputs/incoming/${TRACE_ID}.json"
 
-          echo '{' > "$FILE"
-          echo '  "trace_id": "'"$TRACE_ID"'",' >> "$FILE"
-          echo '  "source": "'"$SOURCE_REPO"'",' >> "$FILE"
-          echo '  "route": "'"$ROUTE_NAME"'",' >> "$FILE"
-          echo '  "received_at": "'"$TIMESTAMP"'",' >> "$FILE"
-          echo '  "status": "received"' >> "$FILE"
-          echo '}' >> "$FILE"
+          jq -n \
+            --arg trace_id "$TRACE_ID" \
+            --arg source "$SOURCE_REPO" \
+            --arg route "$ROUTE_NAME" \
+            --arg received_at "$TIMESTAMP" \
+            '{
+              trace_id: $trace_id,
+              source: $source,
+              route: $route,
+              received_at: $received_at,
+              status: "received"
+            }' > "$FILE"
 
           echo "Wrote $FILE"
-
-      - name: Commit incoming payload
-        run: |
-          git config user.name "codex-bot"
-          git config user.email "actions@github.com"
-          git pull origin main --rebase || echo "No remote changes"
-          git add inputs/incoming/
-          git commit -m "Received dispatch ${TRACE_ID}" || echo "No changes"
-          git push origin main
 
       - name: Emit trace (stored)
         env:
@@ -119,35 +115,44 @@ jobs:
               \"client_payload\": {
                 \"trace_id\": \"$TRACE_ID\",
                 \"repo\": \"${GITHUB_REPOSITORY}\",
-                \"workflow\": \"AVOT Core Receiver\",
+                \"workflow\": \"avot-engine-receiver\",
                 \"status\": \"stored\"
               }
             }"
 
       - name: Simulate AVOT execution
         run: |
-          echo "Running AVOT logic for $TRACE_ID"
+          echo "Running AVOT engine logic for $TRACE_ID"
           sleep 2
 
           RESULT_FILE="outputs/results/${TRACE_ID}.json"
 
-          echo '{' > "$RESULT_FILE"
-          echo '  "trace_id": "'"$TRACE_ID"'",' >> "$RESULT_FILE"
-          echo '  "repo": "'"${GITHUB_REPOSITORY}"'",' >> "$RESULT_FILE"
-          echo '  "status": "completed",' >> "$RESULT_FILE"
-          echo '  "completed_at": "'"$(date -u +"%Y-%m-%dT%H:%M:%SZ")"'"' >> "$RESULT_FILE"
-          echo '}' >> "$RESULT_FILE"
+          jq -n \
+            --arg trace_id "$TRACE_ID" \
+            --arg repo "$GITHUB_REPOSITORY" \
+            --arg completed_at "$(date -u +"%Y-%m-%dT%H:%M:%SZ")" \
+            '{
+              trace_id: $trace_id,
+              repo: $repo,
+              status: "completed",
+              completed_at: $completed_at
+            }' > "$RESULT_FILE"
 
           echo "Execution complete"
           echo "Wrote $RESULT_FILE"
 
-      - name: Commit execution result
+      - name: Commit local receiver artifacts
         run: |
           git config user.name "codex-bot"
           git config user.email "actions@github.com"
+
           git pull origin main --rebase || echo "No remote changes"
-          git add outputs/results/
-          git commit -m "Execution result ${TRACE_ID}" || echo "No changes"
+
+          git add inputs/incoming/ outputs/results/
+          git commit -m "AVOT engine execution ${TRACE_ID}" || echo "No changes"
+
+          git pull origin main --rebase || echo "No remote changes"
+
           git push origin main
 
       - name: Emit trace (engine complete)
@@ -162,7 +167,7 @@ jobs:
               \"client_payload\": {
                 \"trace_id\": \"$TRACE_ID\",
                 \"repo\": \"${GITHUB_REPOSITORY}\",
-                \"workflow\": \"AVOT Core Receiver\",
+                \"workflow\": \"avot-engine-receiver\",
                 \"status\": \"engine_completed\"
               }
             }"
@@ -182,7 +187,7 @@ jobs:
               \"client_payload\": {
                 \"trace_id\": \"$TRACE_ID\",
                 \"status\": \"completed\",
-                \"source\": \"AVOT-engine-core-\"
+                \"source\": \"avot-engine\"
               }
             }")
 
@@ -190,10 +195,8 @@ jobs:
           cat response.txt || true
 
           if [ "$RESPONSE" = "204" ]; then
-            echo "Result dispatched"
             RESULT_STATUS="result_sent"
           else
-            echo "Result dispatch failed"
             RESULT_STATUS="result_failed"
           fi
 
@@ -211,7 +214,7 @@ jobs:
               \"client_payload\": {
                 \"trace_id\": \"$TRACE_ID\",
                 \"repo\": \"${GITHUB_REPOSITORY}\",
-                \"workflow\": \"AVOT Core Receiver\",
+                \"workflow\": \"avot-engine-receiver\",
                 \"status\": \"$RESULT_STATUS\"
               }
             }"
