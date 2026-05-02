@@ -1,7 +1,7 @@
 {
   "trace_id": "trc_test-signal",
   "source": "control-center",
-  "route": "AVOT-engine-core-",
-  "received_at": "2026-04-19T06:02:20Z",
+  "route": "avot-engine",
+  "received_at": "2026-05-02T17:24:14Z",
   "status": "received"
 }
