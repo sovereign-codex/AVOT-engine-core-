@@ -1,6 +1,7 @@
 {
   "trace_id": "trc_control-center-test",
   "source": "control-center",
-  "received_at": "2026-04-09T05:21:45Z",
+  "route": "avot-engine",
+  "received_at": "2026-05-02T17:24:02Z",
   "status": "received"
 }
